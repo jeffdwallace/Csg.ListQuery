@@ -73,7 +73,7 @@ namespace Csg.ListQuery.Sql
 
             return listQuery;
         }
-        
+
         public static IListQueryBuilder RemoveHandler(this IListQueryBuilder listQuery, string name)
         {
             listQuery.Configuration.Handlers.Remove(name);
@@ -153,7 +153,7 @@ namespace Csg.ListQuery.Sql
                 action(e.Configuration, e.QueryBuilder);
             };
 
-            return builder;                                   
+            return builder;
         }
 
         public static void ApplyFilters(IListQueryBuilder listQuery, IDbQueryBuilder queryBuilder)
@@ -184,7 +184,7 @@ namespace Csg.ListQuery.Sql
 
                 if (where.Filters.Count > 0)
                 {
-                    where.ApplyToQuery(queryBuilder);                    
+                    where.ApplyToQuery(queryBuilder);
                 }
             }
         }
@@ -250,7 +250,7 @@ namespace Csg.ListQuery.Sql
                     Limit = listQuery.Configuration.UseLimitOracle && !listQuery.Configuration.UseStreamingResult ? listQuery.Configuration.QueryDefinition.Limit + 1 : listQuery.Configuration.QueryDefinition.Limit,
                     Offset = listQuery.Configuration.QueryDefinition.Offset
                 };
-            }                
+            }
         }
 
         /// <summary>
@@ -276,23 +276,33 @@ namespace Csg.ListQuery.Sql
 
         public static IDbQueryBuilder GetCountQuery(IListQueryBuilder query)
         {
-            var countQuery = query.Apply().SelectOnly(new SqlRawColumn("COUNT(1)"));
+            
+            var fullQuery = query.Apply().Fork();
+            fullQuery.PagingOptions = null;
+            fullQuery.OrderBy.Clear();
+            fullQuery.Prefix = null;
+            fullQuery.Suffix = null;
+            
+            var sqlString = fullQuery.ToString();
 
-            countQuery.PagingOptions = null;
-            countQuery.OrderBy.Clear();
-
-            return countQuery;           
+            fullQuery = new DbQueryBuilder(sqlString, fullQuery.Connection);
+            return fullQuery.SelectOnly(new SqlRawColumn("COUNT(1)"));
         }
 
         public static SqlStatementBatch Render(this Csg.ListQuery.Sql.IListQueryBuilder builder, bool getTotalWhenLimiting = true)
         {
             var appiedQuery = builder.Apply();
-
             if (getTotalWhenLimiting && appiedQuery.PagingOptions?.Limit > 0 && appiedQuery.PagingOptions?.Offset == 0)
             {
+                var prefix = appiedQuery.Prefix;
+                var Suffix = appiedQuery.Suffix;
+                
                 var countQuery = GetCountQuery(builder);
-                return new DbQueryBuilder[] { (DbQueryBuilder)countQuery, (DbQueryBuilder)appiedQuery }
+                  
+                var buildertest = new DbQueryBuilder[] { (DbQueryBuilder)countQuery, (DbQueryBuilder)appiedQuery }
                     .RenderBatch();
+
+                return new SqlStatementBatch(2, (prefix!=null ? prefix + ";" :"")+ buildertest.CommandText + (Suffix != null ? Suffix + ";" : "") , buildertest.Parameters);
             }
             else
             {
